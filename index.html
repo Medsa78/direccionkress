@@ -389,8 +389,16 @@ function renderLTM(yr){
     labels.unshift(ML[m-1]+(m===1?` '${String(a).slice(2)}`:''));
     m--; if(m===0){m=12;a--;}
   }
-  const ltmCur=months.map(mo=>sumE(DATA.filter(d=>d.ANO===mo.ano&&d.MES===mo.mes)));
-  const ltmPrev=months.map(mo=>sumE(DATA.filter(d=>d.ANO===mo.ano-1&&d.MES===mo.mes)));
+  // Acumulado: suma progresiva mes a mes
+  let accCur=0,accPrev=0;
+  const ltmCur=months.map(mo=>{
+    accCur+=sumE(DATA.filter(d=>d.ANO===mo.ano&&d.MES===mo.mes));
+    return accCur;
+  });
+  const ltmPrev=months.map(mo=>{
+    accPrev+=sumE(DATA.filter(d=>d.ANO===mo.ano-1&&d.MES===mo.mes));
+    return accPrev;
+  });
   const firstMon=months[0],lastMon=months[11];
   document.getElementById('ltm-range').textContent=
     `${ML[firstMon.mes-1]} ${firstMon.ano} → ${ML[lastMon.mes-1]} ${lastMon.ano}`;
