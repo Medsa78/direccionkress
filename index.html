@@ -212,7 +212,7 @@ footer{padding:11px 28px;border-top:1px solid rgba(255,255,255,0.05);background:
   <div class="row c2">
     <div class="card">
       <div class="ct">
-        <span class="ct-t">Clientes que compran cada mes</span>
+        <span class="ct-t">Clientes que compran vs perdidos / mes</span>
         <span class="bx" id="cli-mes-bx">—</span>
       </div>
       <div class="active-def">Activo = +3.000€ acumulados en últimos 12 meses</div>
@@ -443,27 +443,67 @@ function renderCliMes(yr,activeClis){
   document.getElementById('cli-mes-bx').textContent=yr;
   document.getElementById('pct-mes-bx').textContent=yr;
   const totalActive=activeClis.size||1;
+
+  // Clientes que compran cada mes
   const cliPerMes=Array.from({length:12},(_,i)=>{
     const mes=i+1;
     const cids=new Set(DATA.filter(d=>d.ANO===yr&&d.MES===mes).map(d=>d.CID));
     return cids.size;
   });
   const pctPerMes=cliPerMes.map(n=>parseFloat((n/totalActive*100).toFixed(1)));
+
+  // Clientes perdidos cada mes:
+  // Cliente activo (compró en los 12m anteriores a ese mes) que NO compra ese mes
+  // ni en los 3 meses siguientes → lo consideramos perdido en ese mes
+  // Versión práctica: activos en mes M-12..M-1 que no aparecen en mes M ni M+1..M+2
+  const perdidosPerMes=Array.from({length:12},(_,i)=>{
+    const mes=i+1;
+    // Ventana previa: 12 meses antes de este mes
+    const prevWindow=new Set();
+    for(let back=1;back<=12;back++){
+      let bm=mes-back, ba=yr;
+      if(bm<=0){bm+=12;ba--;}
+      DATA.filter(d=>d.ANO===ba&&d.MES===bm).forEach(d=>prevWindow.add(d.CID));
+    }
+    // Ventana futura: 3 meses después (para confirmar que dejaron de comprar)
+    const futWindow=new Set();
+    for(let fwd=0;fwd<=2;fwd++){
+      let fm=mes+fwd, fa=yr;
+      if(fm>12){fm-=12;fa++;}
+      DATA.filter(d=>d.ANO===fa&&d.MES===fm).forEach(d=>futWindow.add(d.CID));
+    }
+    // Perdido = estaba activo antes pero no aparece en ventana futura
+    let lost=0;
+    prevWindow.forEach(cid=>{if(!futWindow.has(cid))lost++;});
+    return lost;
+  });
+
   dc('cCliMes');
   const c1=document.getElementById('cCliMes')?.getContext('2d');
   if(c1)CH['cCliMes']=new Chart(c1,{type:'bar',
-    data:{labels:ML,datasets:[{label:'Clientes que compran',data:cliPerMes,
-      backgroundColor:'#C41010',borderRadius:2,borderSkipped:false}]},
-    options:{responsive:true,plugins:{legend:{display:false}},
+    data:{labels:ML,datasets:[
+      {label:'Clientes que compran',data:cliPerMes,
+        backgroundColor:'#C41010',borderRadius:2,borderSkipped:false},
+      {label:'Clientes perdidos',data:perdidosPerMes,
+        backgroundColor:'rgba(255,80,80,0.25)',borderRadius:2,borderSkipped:false,
+        borderColor:'rgba(255,80,80,0.5)',borderWidth:1}
+    ]},
+    options:{responsive:true,plugins:{legend:{labels:lbl.labels}},
       scales:{x:{...gx},y:{...gx,ticks:{...gx.ticks,callback:v=>v}}}}});
+
   dc('cPctMes');
   const c2=document.getElementById('cPctMes')?.getContext('2d');
   if(c2)CH['cPctMes']=new Chart(c2,{type:'line',
-    data:{labels:ML,datasets:[{label:'% clientes activos',data:pctPerMes,
-      borderColor:'#C8A84B',backgroundColor:'rgba(200,168,75,0.08)',
-      tension:.35,pointRadius:4,borderWidth:2.5,fill:true}]},
-    options:{responsive:true,plugins:{legend:{display:false}},
-      scales:{x:{...gx},y:{...gx,min:0,max:100,ticks:{...gx.ticks,callback:v=>`${v}%`}}}}});
+    data:{labels:ML,datasets:[
+      {label:'% compran',data:pctPerMes,
+        borderColor:'#C8A84B',backgroundColor:'rgba(200,168,75,0.08)',
+        tension:.35,pointRadius:4,borderWidth:2.5,fill:true},
+      {label:'Perdidos',data:perdidosPerMes,
+        borderColor:'rgba(255,80,80,0.6)',backgroundColor:'transparent',
+        tension:.35,pointRadius:3,borderWidth:1.5,borderDash:[4,3]}
+    ]},
+    options:{responsive:true,plugins:{legend:{labels:lbl.labels}},
+      scales:{x:{...gx},y:{...gx,min:0,ticks:{...gx.ticks,callback:v=>v}}}}});
 }
 
 function renderMensual(yr,yrPrev){
